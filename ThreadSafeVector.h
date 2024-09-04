@@ -1,9 +1,16 @@
-
-// Templated thread-safe vector class
 template <typename T>
 class ThreadSafeVector
 {
 public:
+    __host__ ThreadSafeVector() : size_(0), capacity_(100)
+    {
+        // Allocate memory for the vector and size on the device
+        hipMalloc(&data_, capacity_ * sizeof(T));
+        hipMalloc(&d_size_, sizeof(int));
+
+        // Initialize size on the device
+        hipMemcpy(d_size_, &size_, sizeof(int), hipMemcpyHostToDevice);
+    }
     __host__ ThreadSafeVector(size_t capacity) : size_(0), capacity_(capacity)
     {
         // Allocate memory for the vector and size on the device
@@ -50,6 +57,14 @@ public:
     __host__ __device__ T *data() const
     {
         return data_;
+    }
+    __host__ __device__ int *size() const
+    {
+        return d_size_;
+    }
+    __host__ __device__ T &operator[](int index)
+    {
+        return data_[index];
     }
 
 private:

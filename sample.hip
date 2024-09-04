@@ -1,6 +1,6 @@
 #include <hip/hip_runtime.h>
 #include <iostream>
-#include "ThreadSafeVector.h"
+#include "PregelClasses.h"
 
 // Kernel to demonstrate the use of ThreadSafeVector
 __global__ void kernel(ThreadSafeVector<int> *vector, int num_elements)

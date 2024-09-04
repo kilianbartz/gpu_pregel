@@ -1,1 +1,1 @@
-hipcc .\sample.hip -I "C:\ROCm\include" -L "C:\ROCm\lib" --offload-arch=gfx1030
+hipcc .\main.hip -I "C:\ROCm\include" -L "C:\ROCm\lib" --offload-arch=gfx1030
