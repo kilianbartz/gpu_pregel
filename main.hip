@@ -5,8 +5,9 @@
 #include <algorithm>
 
 #define DELTA 0.85
+#define EPSILON 1e-6
 
-__global__ void pagerank_compute_new_rank(double *current_values, double *sums, bool *active_old, bool *active_new, int num_elements)
+__global__ void pagerank_compute_new_rank(double *current_values, double *sums, bool *active_old, bool *active_new, double *total_change, int num_elements)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -14,7 +15,10 @@ __global__ void pagerank_compute_new_rank(double *current_values, double *sums, 
         return;
 
     // Compute the new PageRank value for the vertex
-    current_values[tid] = DELTA * sums[tid] + (1 - DELTA) / num_elements;
+    double new_value = DELTA * sums[tid] + (1 - DELTA) / num_elements;
+    double change = abs(new_value - current_values[tid]);
+    current_values[tid] = new_value;
+    atomicAdd(total_change, change);
     sums[tid] = 0;
     active_new[tid] = false;
 }
@@ -47,6 +51,8 @@ int main()
     int neighbors[num_vertices] = {1, 0};
     int neighbors_offsets[num_vertices + 1] = {0, 1, 2};
 
+    double total_change = 0;
+
     // init device data
     double *d_current_values;
     hipMalloc(&d_current_values, num_vertices * sizeof(double));
@@ -72,15 +78,27 @@ int main()
     hipMalloc(&d_neighbors_offsets, (num_vertices + 1) * sizeof(int));
     hipMemcpy(d_neighbors_offsets, neighbors_offsets, (num_vertices + 1) * sizeof(int), hipMemcpyHostToDevice);
 
+    double *d_total_change;
+    hipMalloc((void **)&d_total_change, sizeof(double));
+    hipMemcpy(d_total_change, &total_change, sizeof(double), hipMemcpyHostToDevice);
+
     // run kernel
-    for (int i = 0; i < num_iterations; i++)
+    int iterations_needed = 0;
+    for (; iterations_needed < num_iterations; iterations_needed++)
     {
-        hipLaunchKernelGGL(pagerank_compute_new_rank, dim3((num_vertices + 255) / 256), dim3(256), 0, 0, d_current_values, d_sums, d_active_old, d_active_new, num_vertices);
+        hipLaunchKernelGGL(pagerank_compute_new_rank, dim3((num_vertices + 255) / 256), dim3(256), 0, 0, d_current_values, d_sums, d_active_old, d_active_new, d_total_change, num_vertices);
         hipDeviceSynchronize();
+        // could this be optimized to prevent copying back and forth?
+        hipMemcpy(&total_change, d_total_change, sizeof(double), hipMemcpyDeviceToHost);
+        if (total_change < EPSILON)
+            break;
+        total_change = 0;
+        hipMemcpy(d_total_change, &total_change, sizeof(double), hipMemcpyHostToDevice);
         hipLaunchKernelGGL(pagerank_distribute_new_rank, dim3((num_vertices + 255) / 256), dim3(256), 0, 0, d_current_values, d_neighbors, d_neighbors_offsets, d_sums, d_active_old, d_active_new, num_vertices);
         hipDeviceSynchronize();
         std::swap(d_active_old, d_active_new);
     }
+    std::cout << "Converged after " << iterations_needed << " iterations" << std::endl;
 
     // copy back
     hipMemcpy(current_values, d_current_values, num_vertices * sizeof(double), hipMemcpyDeviceToHost);
