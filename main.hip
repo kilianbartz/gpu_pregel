@@ -44,6 +44,7 @@ int main()
     const int num_vertices = 2;
     const int num_iterations = 100;
 
+    // default example
     double current_values[num_vertices] = {0, 0};
     double sums[num_vertices] = {};
     bool active_old[num_vertices] = {true, true};
@@ -88,7 +89,7 @@ int main()
     {
         hipLaunchKernelGGL(pagerank_compute_new_rank, dim3((num_vertices + 255) / 256), dim3(256), 0, 0, d_current_values, d_sums, d_active_old, d_active_new, d_total_change, num_vertices);
         hipDeviceSynchronize();
-        // could this be optimized to prevent copying back and forth?
+        // could this be optimized to prevent copying back and forth? probably only check every 10 iterations or so
         hipMemcpy(&total_change, d_total_change, sizeof(double), hipMemcpyDeviceToHost);
         if (total_change < EPSILON)
             break;
