@@ -3,7 +3,9 @@
 #include <vector>
 #include <queue>
 #include <algorithm>
+#include <cstring>
 #include "ImportGraph.h"
+#include <chrono>
 
 #define DELTA 0.85
 #define EPSILON 1e-6
@@ -39,8 +41,17 @@ __global__ void pagerank_distribute_new_rank(double *current_values, int *neighb
     }
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    // read cli args
+    if (argc != 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " <filename>" << std::endl;
+        return 1;
+    }
+
+    const char *filename = argv[1];
+
     // init host data
     const int num_iterations = 100;
 
@@ -53,7 +64,7 @@ int main()
     // int neighbors[num_vertices] = {1, 0};
     // int neighbors_offsets[num_vertices + 1] = {0, 1, 2};
 
-    Graph graph("test.txt");
+    Graph graph(filename);
     int num_vertices = graph.num_vertices;
     std::vector<double> current_values(num_vertices, 1);
     std::vector<double> sums(num_vertices);
@@ -96,6 +107,7 @@ int main()
     int iterations_needed = 0;
     for (; iterations_needed < num_iterations; iterations_needed++)
     {
+        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         hipLaunchKernelGGL(pagerank_compute_new_rank, dim3((num_vertices + 255) / 256), dim3(256), 0, 0, d_current_values, d_sums, d_active_old, d_active_new, d_total_change, num_vertices);
         hipDeviceSynchronize();
         // could this be optimized to prevent copying back and forth? probably only check every 10 iterations or so
@@ -107,6 +119,8 @@ int main()
         hipLaunchKernelGGL(pagerank_distribute_new_rank, dim3((num_vertices + 255) / 256), dim3(256), 0, 0, d_current_values, d_neighbors, d_neighbors_offsets, d_sums, d_active_old, d_active_new, num_vertices);
         hipDeviceSynchronize();
         std::swap(d_active_old, d_active_new);
+        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        std::cout << "Iteration " << iterations_needed << " took " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "ms" << std::endl;
     }
     std::cout << "Converged after " << iterations_needed << " iterations" << std::endl;
 
@@ -114,9 +128,13 @@ int main()
     hipMemcpy(&current_values[0], d_current_values, num_vertices * sizeof(double), hipMemcpyDeviceToHost);
 
     // print result
-    for (int i = 0; i < num_vertices; i++)
+    // sort by highest pagerank
+    std::sort(current_values.begin(), current_values.end(), std::greater<double>());
+    for (double value : current_values)
     {
-        std::cout << "Vertex " << i << ": " << current_values[i] << std::endl;
+        if (value < .001)
+            break;
+        std::cout << value << std::endl;
     }
 
     // clean up

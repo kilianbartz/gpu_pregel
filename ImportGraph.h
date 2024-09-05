@@ -2,6 +2,7 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 class Graph
 {
 public:
@@ -9,6 +10,7 @@ public:
 
     Graph(std::string filename)
     {
+        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         std::string line;
         std::ifstream file(filename);
         int a, b;
@@ -27,6 +29,8 @@ public:
             adj_list[a].push_back(b);
         }
         file.close();
+        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        std::cout << "Time to read the file: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
         num_vertices = adj_list.size();
         int counter = 0;
         offsets.push_back(0);
@@ -46,6 +50,8 @@ public:
                 offsets.push_back(counter);
             }
         }
+        std::chrono::steady_clock::time_point end2 = std::chrono::steady_clock::now();
+        std::cout << "Time to process adjacency lists: " << std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count() << "[ms]" << std::endl;
     }
 
     std::vector<int> neighbors;
