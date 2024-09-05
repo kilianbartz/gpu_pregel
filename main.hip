@@ -3,6 +3,7 @@
 #include <vector>
 #include <queue>
 #include <algorithm>
+#include "ImportGraph.h"
 
 #define DELTA 0.85
 #define EPSILON 1e-6
@@ -41,43 +42,51 @@ __global__ void pagerank_distribute_new_rank(double *current_values, int *neighb
 int main()
 {
     // init host data
-    const int num_vertices = 2;
     const int num_iterations = 100;
 
     // default example
-    double current_values[num_vertices] = {0, 0};
-    double sums[num_vertices] = {};
-    bool active_old[num_vertices] = {true, true};
-    bool active_new[num_vertices] = {};
-    int neighbors[num_vertices] = {1, 0};
-    int neighbors_offsets[num_vertices + 1] = {0, 1, 2};
+    // const int num_vertices = 2;
+    // double current_values[num_vertices] = {0, 0};
+    // double sums[num_vertices] = {};
+    // bool active_old[num_vertices] = {true, true};
+    // bool active_new[num_vertices] = {};
+    // int neighbors[num_vertices] = {1, 0};
+    // int neighbors_offsets[num_vertices + 1] = {0, 1, 2};
+
+    Graph graph("test.txt");
+    int num_vertices = graph.num_vertices;
+    std::vector<double> current_values(num_vertices, 1);
+    std::vector<double> sums(num_vertices);
+    std::vector<char> active_old(num_vertices, true);
+    std::vector<int> neighbors = graph.neighbors;
+    std::vector<int> neighbors_offsets = graph.offsets;
 
     double total_change = 0;
 
     // init device data
     double *d_current_values;
     hipMalloc(&d_current_values, num_vertices * sizeof(double));
-    hipMemcpy(d_current_values, current_values, num_vertices * sizeof(double), hipMemcpyHostToDevice);
+    hipMemcpy(d_current_values, &current_values[0], num_vertices * sizeof(double), hipMemcpyHostToDevice);
 
     double *d_sums;
     hipMalloc(&d_sums, num_vertices * sizeof(double));
-    hipMemcpy(d_sums, sums, num_vertices * sizeof(double), hipMemcpyHostToDevice);
+    hipMemcpy(d_sums, &sums[0], num_vertices * sizeof(double), hipMemcpyHostToDevice);
 
     bool *d_active_old;
     hipMalloc(&d_active_old, num_vertices * sizeof(bool));
-    hipMemcpy(d_active_old, active_old, num_vertices * sizeof(bool), hipMemcpyHostToDevice);
+    hipMemcpy(d_active_old, active_old.data(), num_vertices * sizeof(bool), hipMemcpyHostToDevice);
 
     bool *d_active_new;
     hipMalloc(&d_active_new, num_vertices * sizeof(bool));
-    hipMemcpy(d_active_new, active_old, num_vertices * sizeof(bool), hipMemcpyHostToDevice);
+    hipMemcpy(d_active_new, active_old.data(), num_vertices * sizeof(bool), hipMemcpyHostToDevice);
 
     int *d_neighbors;
     hipMalloc(&d_neighbors, num_vertices * sizeof(int));
-    hipMemcpy(d_neighbors, neighbors, num_vertices * sizeof(int), hipMemcpyHostToDevice);
+    hipMemcpy(d_neighbors, neighbors.data(), num_vertices * sizeof(int), hipMemcpyHostToDevice);
 
     int *d_neighbors_offsets;
     hipMalloc(&d_neighbors_offsets, (num_vertices + 1) * sizeof(int));
-    hipMemcpy(d_neighbors_offsets, neighbors_offsets, (num_vertices + 1) * sizeof(int), hipMemcpyHostToDevice);
+    hipMemcpy(d_neighbors_offsets, neighbors_offsets.data(), (num_vertices + 1) * sizeof(int), hipMemcpyHostToDevice);
 
     double *d_total_change;
     hipMalloc((void **)&d_total_change, sizeof(double));
@@ -102,12 +111,12 @@ int main()
     std::cout << "Converged after " << iterations_needed << " iterations" << std::endl;
 
     // copy back
-    hipMemcpy(current_values, d_current_values, num_vertices * sizeof(double), hipMemcpyDeviceToHost);
+    hipMemcpy(&current_values[0], d_current_values, num_vertices * sizeof(double), hipMemcpyDeviceToHost);
 
     // print result
     for (int i = 0; i < num_vertices; i++)
     {
-        std::cout << "Vertex " << i << " has PageRank " << current_values[i] << std::endl;
+        std::cout << "Vertex " << i << ": " << current_values[i] << std::endl;
     }
 
     // clean up

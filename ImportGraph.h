@@ -5,7 +5,7 @@
 class Graph
 {
 public:
-    int num_vertices;
+    int num_vertices = 0;
 
     Graph(std::string filename)
     {
@@ -48,20 +48,9 @@ public:
         }
     }
 
-    int *get_neighbors()
-    {
-        int *n = &neighbors[0];
-        return n;
-    }
-
-    int *get_offsets()
-    {
-        int *o = &offsets[0];
-        return o;
-    }
+    std::vector<int> neighbors;
+    std::vector<int> offsets;
 
 private:
     std::vector<std::vector<int>> adj_list;
-    std::vector<int> neighbors;
-    std::vector<int> offsets;
 };
