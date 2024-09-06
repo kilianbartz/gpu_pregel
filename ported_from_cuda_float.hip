@@ -1,5 +1,4 @@
 #include <hip/hip_runtime.h>
-#include <hip/hip_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/extrema.h>
@@ -18,14 +17,14 @@
 #include "ImportGraph.h"
 
 const float DAMPING_FACTOR = 0.85;
-const float EPSILON = 1e-8;
-const int MAX_ITERATIONS = 10;
+const float EPSILON = 1e-6;
+const int MAX_ITERATIONS = 1000;
 
 // HIP kernel for PageRank computation
 __global__ void pagerank_kernel(const int *src_indices, const int *dest_indices, const int *out_degrees,
                                 float *pagerank, float *new_pagerank, int num_edges, int num_vertices)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
     if (idx < num_edges)
     {
         int src = src_indices[idx];
@@ -37,10 +36,10 @@ __global__ void pagerank_kernel(const int *src_indices, const int *dest_indices,
 // HIP kernel for applying damping factor
 __global__ void apply_damping_kernel(float *pagerank, const float *new_pagerank, int num_vertices)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
     if (idx < num_vertices)
     {
-        pagerank[idx] = (1.0f - DAMPING_FACTOR) / num_vertices + DAMPING_FACTOR * new_pagerank[idx];
+        pagerank[idx] = (1.0 - DAMPING_FACTOR) / num_vertices + DAMPING_FACTOR * new_pagerank[idx];
     }
 }
 
@@ -86,7 +85,7 @@ public:
         // Initialize pagerank vectors
         d_pagerank.resize(num_vertices);
         d_new_pagerank.resize(num_vertices);
-        thrust::fill(d_pagerank.begin(), d_pagerank.end(), 1.0f / num_vertices);
+        thrust::fill(d_pagerank.begin(), d_pagerank.end(), 1.0 / num_vertices);
     }
 
     std::vector<float> compute()
@@ -102,7 +101,7 @@ public:
         {
             hipEventRecord(start);
 
-            thrust::fill(d_new_pagerank.begin(), d_new_pagerank.end(), 0.0f);
+            thrust::fill(d_new_pagerank.begin(), d_new_pagerank.end(), 0.0);
 
             // Launch PageRank kernel
             hipLaunchKernelGGL(pagerank_kernel, dim3(num_blocks), dim3(block_size), 0, 0,
@@ -116,16 +115,9 @@ public:
 
             // Launch damping factor kernel
             hipLaunchKernelGGL(apply_damping_kernel, dim3((num_vertices + block_size - 1) / block_size), dim3(block_size), 0, 0,
-                               thrust::raw_pointer_cast(d_pagerank.data()),
+                               thrust::raw_pointer_cast(d_new_pagerank.data()),
                                thrust::raw_pointer_cast(d_new_pagerank.data()),
                                num_vertices);
-
-            hipEventRecord(stop);
-            hipEventSynchronize(stop);
-
-            float elapsed_time;
-            hipEventElapsedTime(&elapsed_time, start, stop);
-            std::cout << "Iteration " << iteration + 1 << " time: " << elapsed_time << " ms" << std::endl;
 
             // Check for convergence
             float sum_diff = thrust::transform_reduce(
@@ -133,17 +125,26 @@ public:
                 thrust::make_zip_iterator(thrust::make_tuple(d_pagerank.end(), d_new_pagerank.end())),
                 [] __host__ __device__(const thrust::tuple<float, float> &t) -> float
                 {
-                    return abs(thrust::get<0>(t) - thrust::get<1>(t));
+                    return fabs(thrust::get<0>(t) - thrust::get<1>(t));
                 },
-                0.0f,
+                0.0,
                 thrust::plus<float>());
-            std::cout << "Sum diff: " << sum_diff << std::endl;
+
+            hipEventRecord(stop);
+            hipEventSynchronize(stop);
+
+            float elapsed_time;
+            hipEventElapsedTime(&elapsed_time, start, stop);
+            std::cout << "Iteration " << iteration + 1 << " time: " << elapsed_time << " ms, sum_diff: " << sum_diff << std::endl;
 
             if (sum_diff < EPSILON)
             {
                 std::cout << "Converged after " << iteration + 1 << " iterations" << std::endl;
                 break;
             }
+
+            // Swap pagerank vectors for the next iteration
+            d_pagerank.swap(d_new_pagerank);
         }
 
         hipEventDestroy(start);
