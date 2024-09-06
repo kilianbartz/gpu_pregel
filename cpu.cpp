@@ -49,10 +49,10 @@ public:
 
     std::vector<double> compute()
     {
-        auto start_time = std::chrono::high_resolution_clock::now();
 
         for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration)
         {
+            auto start_time = std::chrono::high_resolution_clock::now();
             // Reset new_pagerank
             std::fill(new_pagerank.begin(), new_pagerank.end(), 0.0f);
 
