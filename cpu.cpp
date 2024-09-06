@@ -1,113 +1,144 @@
 #include <iostream>
 #include <vector>
-#include <queue>
+#include <string>
 #include <algorithm>
-#include <cstring>
-#include <chrono>
+#include <numeric>
 #include <cmath>
+#include <chrono>
+
+// Include the Graph class header here
 #include "ImportGraph.h"
 
-#define DELTA 0.85
-#define EPSILON 1e-8
+const double DAMPING_FACTOR = 0.85;
+const double EPSILON = 1e-6;
+const int MAX_ITERATIONS = 1000;
 
-void pagerank_compute_new_rank(std::vector<double> &current_values, const std::vector<double> &sums,
-                               std::vector<bool> &active_old, std::vector<bool> &active_new,
-                               double &total_change, int num_elements)
+class PageRank
 {
-    for (int tid = 0; tid < num_elements; ++tid)
+private:
+    int num_vertices;
+    int num_edges;
+    std::vector<int> src_indices;
+    std::vector<int> dest_indices;
+    std::vector<int> out_degrees;
+    std::vector<double> pagerank;
+    std::vector<double> new_pagerank;
+
+public:
+    PageRank(const Graph &graph) : num_vertices(graph.num_vertices), num_edges(0)
     {
-        if (!active_old[tid])
-            continue;
+        out_degrees.resize(num_vertices, 0);
 
-        double new_value = DELTA * sums[tid] + (1 - DELTA) / num_elements;
-        double change = std::abs(new_value - current_values[tid]);
-        current_values[tid] = new_value;
-        total_change += change;
-        active_new[tid] = false;
-    }
-}
-
-void pagerank_distribute_new_rank(const std::vector<double> &current_values,
-                                  const std::vector<int> &neighbors,
-                                  const std::vector<int> &neighbor_offsets,
-                                  std::vector<double> &sums,
-                                  const std::vector<bool> &active_old,
-                                  std::vector<bool> &active_new,
-                                  int num_elements)
-{
-    for (int tid = 0; tid < num_elements; ++tid)
-    {
-        if (!active_old[tid])
-            continue;
-
-        int num_neighbors = neighbor_offsets[tid + 1] - neighbor_offsets[tid];
-        for (int i = neighbor_offsets[tid]; i < neighbor_offsets[tid + 1]; ++i)
+        // Construct the src and dest indices, and calculate out-degrees
+        for (int src = 0; src < num_vertices; ++src)
         {
-            int neighbor_id = neighbors[i];
-            sums[neighbor_id] += current_values[tid] / num_neighbors;
-            active_new[neighbor_id] = true;
+            for (int edge_idx = graph.offsets[src]; edge_idx < graph.offsets[src + 1]; ++edge_idx)
+            {
+                int dest = graph.neighbors[edge_idx];
+                src_indices.push_back(src);
+                dest_indices.push_back(dest);
+                out_degrees[src]++;
+                num_edges++;
+            }
         }
-    }
-}
 
-int main(int argc, char **argv)
-{
-    if (argc != 2)
+        // Initialize pagerank vectors
+        pagerank.resize(num_vertices, 1.0f / num_vertices);
+        new_pagerank.resize(num_vertices, 0.0f);
+    }
+
+    std::vector<double> compute()
     {
-        std::cerr << "Usage: " << argv[0] << " <filename>" << std::endl;
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration)
+        {
+            // Reset new_pagerank
+            std::fill(new_pagerank.begin(), new_pagerank.end(), 0.0f);
+
+            // Compute PageRank
+            for (int i = 0; i < num_edges; ++i)
+            {
+                int src = src_indices[i];
+                int dest = dest_indices[i];
+                new_pagerank[dest] += pagerank[src] / out_degrees[src];
+            }
+
+            // Apply damping factor
+            for (int i = 0; i < num_vertices; ++i)
+            {
+                new_pagerank[i] = (1.0f - DAMPING_FACTOR) / num_vertices + DAMPING_FACTOR * new_pagerank[i];
+            }
+
+            // Check for convergence
+            double sum_diff = 0.0f;
+            for (int i = 0; i < num_vertices; ++i)
+            {
+                sum_diff += std::abs(pagerank[i] - new_pagerank[i]);
+            }
+            std::cout << "Iteration " << iteration + 1 << " sum_diff: " << sum_diff << std::endl;
+
+            auto end_time = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+            std::cout << "Iteration " << iteration + 1 << " time: " << duration.count() << " ms" << std::endl;
+
+            if (sum_diff < EPSILON)
+            {
+                std::cout << "Converged after " << iteration + 1 << " iterations" << std::endl;
+                break;
+            }
+
+            // Swap pagerank vectors for the next iteration
+            std::swap(pagerank, new_pagerank);
+        }
+
+        return pagerank;
+    }
+};
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " <graph_file>" << std::endl;
         return 1;
     }
 
-    const char *filename = argv[1];
-    const int num_iterations = 100;
-
+    // Load graph from file
+    std::string filename = argv[1];
     Graph graph(filename);
-    int num_vertices = graph.num_vertices;
-    std::vector<double> current_values(num_vertices, 1.0);
-    std::vector<double> sums(num_vertices, 0.0);
-    std::vector<bool> active_old(num_vertices, true);
-    std::vector<bool> active_new(num_vertices, false);
-    std::vector<int> neighbors = graph.neighbors;
-    std::vector<int> neighbors_offsets = graph.offsets;
 
-    double total_change = 0.0;
+    std::cout << "Creating PageRank instance..." << std::endl;
+    auto start_time = std::chrono::high_resolution_clock::now();
 
-    int iterations_needed = 0;
-    auto start = std::chrono::steady_clock::now();
-    for (; iterations_needed < num_iterations; ++iterations_needed)
+    PageRank pr(graph);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    std::cout << "PageRank instance created in " << duration.count() << " ms" << std::endl;
+
+    std::cout << "\nComputing PageRank..." << std::endl;
+    start_time = std::chrono::high_resolution_clock::now();
+
+    std::vector<double> pagerank = pr.compute();
+
+    end_time = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    std::cout << "PageRank computed in " << duration.count() << " ms" << std::endl;
+
+    std::cout << "\nTop 10 vertices by PageRank:" << std::endl;
+    std::vector<std::pair<int, double>> ranked_vertices;
+    for (int i = 0; i < graph.num_vertices; ++i)
     {
-        auto begin = std::chrono::steady_clock::now();
-
-        pagerank_compute_new_rank(current_values, sums, active_old, active_new, total_change, num_vertices);
-
-        if (total_change < EPSILON)
-            break;
-
-        total_change = 0.0;
-        std::fill(sums.begin(), sums.end(), 0.0);
-
-        pagerank_distribute_new_rank(current_values, neighbors, neighbors_offsets, sums, active_old, active_new, num_vertices);
-
-        active_old.swap(active_new);
-        std::fill(active_new.begin(), active_new.end(), false);
-
-        auto end = std::chrono::steady_clock::now();
-        std::cout << "Iteration " << iterations_needed << " took "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()
-                  << "ms" << std::endl;
+        ranked_vertices.push_back({i, pagerank[i]});
     }
+    std::partial_sort(ranked_vertices.begin(), ranked_vertices.begin() + 10, ranked_vertices.end(),
+                      [](const auto &a, const auto &b)
+                      { return a.second > b.second; });
 
-    std::cout << "Converged after " << iterations_needed << " iterations" << std::endl;
-    auto end = std::chrono::steady_clock::now();
-    std::cout << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << std::endl;
-
-    // Sort by highest PageRank
-    std::sort(current_values.begin(), current_values.end(), std::greater<double>());
-    for (double value : current_values)
+    for (int i = 0; i < 10; ++i)
     {
-        if (value < .001)
-            break;
-        std::cout << value << std::endl;
+        std::cout << "Vertex " << ranked_vertices[i].first << ": " << ranked_vertices[i].second << std::endl;
     }
 
     return 0;

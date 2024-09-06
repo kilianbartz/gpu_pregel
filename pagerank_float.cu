@@ -17,13 +17,13 @@
 // Include the Graph class header here
 #include "ImportGraph.h"
 
-const double DAMPING_FACTOR = 0.85;
-const double EPSILON = 1e-6;
+const float DAMPING_FACTOR = 0.85f;
+const float EPSILON = 1e-6f;
 const int MAX_ITERATIONS = 1000;
 
 // CUDA kernel for PageRank computation
 __global__ void pagerank_kernel(const int *src_indices, const int *dest_indices, const int *out_degrees,
-                                double *pagerank, double *new_pagerank, int num_edges, int num_vertices)
+                                float *pagerank, float *new_pagerank, int num_edges, int num_vertices)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < num_edges)
@@ -35,7 +35,7 @@ __global__ void pagerank_kernel(const int *src_indices, const int *dest_indices,
 }
 
 // CUDA kernel for applying damping factor
-__global__ void apply_damping_kernel(double *pagerank, const double *new_pagerank, int num_vertices)
+__global__ void apply_damping_kernel(float *pagerank, const float *new_pagerank, int num_vertices)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < num_vertices)
@@ -54,8 +54,8 @@ private:
     thrust::device_vector<int> d_src_indices;
     thrust::device_vector<int> d_dest_indices;
     thrust::device_vector<int> d_out_degrees;
-    thrust::device_vector<double> d_pagerank;
-    thrust::device_vector<double> d_new_pagerank;
+    thrust::device_vector<float> d_pagerank;
+    thrust::device_vector<float> d_new_pagerank;
 
 public:
     PageRank(const Graph &graph)
@@ -88,7 +88,7 @@ public:
         d_new_pagerank.resize(num_vertices);
         thrust::fill(d_pagerank.begin(), d_pagerank.end(), 1.0f / num_vertices);
     }
-    std::vector<double> compute()
+    std::vector<float> compute()
     {
         int block_size = 256;
         int num_blocks = (num_edges + block_size - 1) / block_size;
@@ -120,15 +120,15 @@ public:
                 num_vertices);
 
             // Check for convergence
-            double sum_diff = thrust::transform_reduce(
+            float sum_diff = thrust::transform_reduce(
                 thrust::make_zip_iterator(thrust::make_tuple(d_pagerank.begin(), d_new_pagerank.begin())),
                 thrust::make_zip_iterator(thrust::make_tuple(d_pagerank.end(), d_new_pagerank.end())),
-                [] __host__ __device__(const thrust::tuple<double, double> &t) -> double
+                [] __host__ __device__(const thrust::tuple<float, float> &t) -> float
                 {
                     return fabs(thrust::get<0>(t) - thrust::get<1>(t));
                 },
                 0.0,
-                thrust::plus<double>());
+                thrust::plus<float>());
 
             cudaEventRecord(stop);
             cudaEventSynchronize(stop);
@@ -151,7 +151,7 @@ public:
         cudaEventDestroy(stop);
 
         // Copy result back to host
-        std::vector<double> pagerank(num_vertices);
+        std::vector<float> pagerank(num_vertices);
         thrust::copy(d_pagerank.begin(), d_pagerank.end(), pagerank.begin());
         return pagerank;
     }
@@ -181,14 +181,14 @@ int main(int argc, char *argv[])
     std::cout << "\nComputing PageRank..." << std::endl;
     start_time = std::chrono::high_resolution_clock::now();
 
-    std::vector<double> pagerank = pr.compute();
+    std::vector<float> pagerank = pr.compute();
 
     end_time = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     std::cout << "PageRank computed in " << duration.count() << " ms" << std::endl;
 
     std::cout << "\nTop 10 vertices by PageRank:" << std::endl;
-    std::vector<std::pair<int, double>> ranked_vertices;
+    std::vector<std::pair<int, float>> ranked_vertices;
     for (int i = 0; i < graph.num_vertices; ++i)
     {
         ranked_vertices.push_back({i, pagerank[i]});

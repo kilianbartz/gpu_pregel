@@ -9,4 +9,4 @@ IF "%~2"=="" (
     SET OUTPUT_FILE=%~2
 )
 
-hipcc %INPUT_FILE% -I "C:\ROCm\include" -L "C:\ROCm\lib" --offload-arch=gfx1030 -o %OUTPUT_FILE%
+hipcc %INPUT_FILE% -I "C:\ROCm\include" -L "C:\ROCm\lib" --offload-arch=gfx1030 -o %OUTPUT_FILE% -std=c++14 -O3
