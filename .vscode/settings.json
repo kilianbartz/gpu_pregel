@@ -71,6 +71,7 @@
     "xtr1common": "cpp",
     "stop_token": "cpp",
     "thread": "cpp",
-    "numeric": "cpp"
+    "numeric": "cpp",
+    "mutex": "cpp"
   }
 }
