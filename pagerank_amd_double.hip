@@ -34,12 +34,12 @@ __global__ void pagerank_kernel(const int *src_indices, const int *dest_indices,
 }
 
 // HIP kernel for applying damping factor
-__global__ void apply_damping_kernel(double *pagerank, const double *new_pagerank, int num_vertices)
+__global__ void apply_damping_kernel(const double *new_pagerank, int num_vertices)
 {
     int idx = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
     if (idx < num_vertices)
     {
-        pagerank[idx] = (1.0 - DAMPING_FACTOR) / num_vertices + DAMPING_FACTOR * new_pagerank[idx];
+        new_pagerank[idx] = (1.0 - DAMPING_FACTOR) / num_vertices + DAMPING_FACTOR * new_pagerank[idx];
     }
 }
 
@@ -115,7 +115,6 @@ public:
 
             // Launch damping factor kernel
             hipLaunchKernelGGL(apply_damping_kernel, dim3((num_vertices + block_size - 1) / block_size), dim3(block_size), 0, 0,
-                               thrust::raw_pointer_cast(d_new_pagerank.data()),
                                thrust::raw_pointer_cast(d_new_pagerank.data()),
                                num_vertices);
 

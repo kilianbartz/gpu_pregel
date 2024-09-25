@@ -4,7 +4,7 @@
 #include <queue>
 #include <algorithm>
 #include <cstring>
-#include "ImportGraph.h"
+#include "../ImportGraph.h"
 #include <chrono>
 
 #define DELTA 0.85
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
     const char *filename = argv[1];
 
     // init host data
-    const int num_iterations = 100;
+    const int num_iterations = 2;
 
     // default example
     // const int num_vertices = 2;
